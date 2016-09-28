@@ -10,13 +10,49 @@ import org.bson.types.ObjectId
 @Transactional
 class InjectorService {
     private static String toolName = 'Redmine'
+    private static String processName = 'RedmineTraceInjector'
     RestBuilder restClient = new RestBuilder()
-    String redmineUrl = Holders.grailsApplication.config.getProperty('injector.redmineUrl')
     String gemsbbUrl = Holders.grailsApplication.config.getProperty('injector.gemsbbUrl')
 
-    private def getMemberByEmail(redmineUserId) {
+    private def getToolsConfigurationFromBB() {
         def resp = restClient.get(
-            "${redmineUrl}/users/${redmineUserId}.json?key=baa9da1d47247ea95bedc425027e7bb30df8f883")
+            "${gemsbbUrl}/toolsConfiguration?toolName=${InjectorService.toolName}&processName=${InjectorService.processName}")
+
+        if(resp.getStatusCode() != HttpStatus.OK) {
+            throw new Exception("Error al obtener la configuración del proceso ${InjectorService.processName}. HttpStatusCode: ${resp.getStatusCode()}")
+        }
+
+        resp.json
+    }
+
+    private def getRepositoryFromBB(organizationId) {
+        def resp = restClient.get(
+            "${gemsbbUrl}/organizations/${organizationId}/repositories?toolName=${InjectorService.toolName}")
+
+        if(resp.getStatusCode() != HttpStatus.OK) {
+            throw new Exception("Error al obtener el repositorio. HttpStatusCode: ${resp.getStatusCode()}")
+        }
+
+        JSONObject result = resp.json
+
+        if(result.size() == 1 || result.id != null) {
+            return result
+        }
+    }
+
+    private def getProjectFromBB(String projectId) {
+        def resp = restClient.get("${gemsbbUrl}/projects/${projectId}")
+
+        if(resp.getStatusCode() != HttpStatus.OK) {
+            throw new Exception("Error al obtener el registro del plan del Blackboard. HttpStatusCode: ${resp.getStatusCode()}")
+        }
+
+        resp.json
+    }
+
+    private def getMemberByEmailFromRedmine(repository, redmineUserId) {
+        def resp = restClient.get(
+            "${repository.data.root}/users/${redmineUserId}.json?key=${repository.data.apiKey}")
 
         if(resp.getStatusCode() != HttpStatus.OK) {
             throw new Exception("Error al obtener el usuario de Redmine. HttpStatusCode: ${resp.getStatusCode()}")
@@ -40,8 +76,6 @@ class InjectorService {
         }
 
         JSONObject result = resp.json
-        println "${gemsbbUrl}/projects/${projectId}/mappings?tool=${tool}"
-        println "mapping: ${resp.json}"
 
         if(result.size() == 1 || result.id != null) {
             return result
@@ -92,8 +126,8 @@ class InjectorService {
         task.internalId
     }
 
-    private def getTimeEntriesFromRedmine(redmineProjectId) {
-        def resp =  restClient.get("${redmineUrl}/time_entries.json?project_id=${redmineProjectId}")
+    private def getTimeEntriesFromRedmine(repository, redmineProjectId) {
+        def resp =  restClient.get("${repository.data.root}/time_entries.json?project_id=${redmineProjectId}")
 
         if(resp.getStatusCode() != HttpStatus.OK) {
             throw new Exception("Error al obtener los registros de hora de Redmine. HttpStatusCode: ${resp.getStatusCode()}")
@@ -101,8 +135,8 @@ class InjectorService {
         resp.json.time_entries
     }
 
-    private def getRedmineTaskById(Integer id) {
-        def resp = restClient.get("${redmineUrl}/issues/${id}.json")
+    private def getRedmineTaskById(repository, Integer id) {
+        def resp = restClient.get("${repository.data.root}/issues/${id}.json")
 
         if(resp.getStatusCode() != HttpStatus.OK) {
             throw new Exception("Error al obtener la tarea de Redmine. HttpStatusCode: ${resp.getStatusCode()}")
@@ -110,8 +144,8 @@ class InjectorService {
         resp.json.issue
     }
 
-    private def buildDetail(timeEntry) {
-        [ member: [id: getMemberByEmail(timeEntry.user.id).id],
+    private def buildDetail(timeEntry, member) {
+        [ member: [id: member.id],
           date: Date.parse('yyyy-MM-dd', timeEntry.spent_on),
           hours: timeEntry.hours]
     }
@@ -179,7 +213,17 @@ class InjectorService {
         responseMapping.json
     }
 
-    def injectProjectTrace(String projectId, String externalProjectId) {
+    def injectProcess() {
+        def toolsConfig = getToolsConfigurationFromBB()
+        toolsConfig.each() {
+            def project = getProjectFromBB(it.project.id)
+            def repository = getRepositoryFromBB(project.organization.id)
+
+            injectProjectTrace(it.project.id, it.parameters.projectId, repository)
+        }
+    }
+
+    def injectProjectTrace(String projectId, Integer externalProjectId, repository) {
         def trace = getTraceFromBB(projectId)
         if(trace == null) {
             trace = [
@@ -191,15 +235,17 @@ class InjectorService {
         }
 
         def mapping = getMapping(projectId, 'Redmine')
-        def redmineTimeEntries = getTimeEntriesFromRedmine(externalProjectId)
+        def redmineTimeEntries = getTimeEntriesFromRedmine(repository, externalProjectId)
 
         if(redmineTimeEntries.size() > 0) {
             def taskTraceMap = new LinkedHashMap()
             redmineTimeEntries.each {
                 if(!taskTraceMap.containsKey(it.issue.id)) {
-                    taskTraceMap[it.issue.id] = [name: getRedmineTaskById(it.issue.id).subject, details: []]
+                    taskTraceMap[it.issue.id] = [name: getRedmineTaskById(repository, it.issue.id).subject, details: []]
                 }
-                taskTraceMap[it.issue.id].details.add(buildDetail(it))
+
+                def member = getMemberByEmailFromRedmine(repository, it.user.id)
+                taskTraceMap[it.issue.id].details.add(buildDetail(it, member))
             }
 
             def taskTraceList = taskTraceMap.collect {
@@ -213,8 +259,6 @@ class InjectorService {
                     ]
             }
 
-            println trace
-            println mapping
             def bbTrace = saveBlackboardTrace(trace, projectId, taskTraceList)
             def bbMapping = saveBlackboardMapping(mapping, projectId, bbTrace)
         }

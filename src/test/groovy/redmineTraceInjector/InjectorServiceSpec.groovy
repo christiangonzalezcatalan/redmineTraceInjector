@@ -4,6 +4,9 @@ import static org.mockserver.integration.ClientAndServer.startClientAndServer
 import static org.mockserver.model.HttpRequest.request
 import static org.mockserver.model.HttpResponse.response
 
+import static redmineTraceInjector.Mocks.BlackboardResponses.getToolConfigurationFromBlackboard
+import static redmineTraceInjector.Mocks.BlackboardResponses.getProjectFromBlackboard
+import static redmineTraceInjector.Mocks.BlackboardResponses.getRepositoryFromBlackboard
 import static redmineTraceInjector.Mocks.BlackboardResponses.getTraceFromBlackboard
 import static redmineTraceInjector.Mocks.BlackboardResponses.getTraceMappingsFromBlackboard
 import static redmineTraceInjector.Mocks.BlackboardResponses.getMemberByEmailFromBlackboard
@@ -43,7 +46,7 @@ class InjectorServiceSpec extends Specification {
         mockServer.reset()
     }
 
-    void 'test inject trace'() {
+    void 'test inject process'() {
         setup:
         //def projectId = '57cc59368acec62bf2f7d7ed'
         //def redmineProjectId = '3'
@@ -51,6 +54,30 @@ class InjectorServiceSpec extends Specification {
         def redmineProjectId = '2'
         def redmineKey = 'baa9da1d47247ea95bedc425027e7bb30df8f883'
 
+        mockServer.when(
+                request('/toolsConfiguration')
+                        .withMethod('GET')
+                        .withQueryStringParameters(new Parameter('toolName', 'Redmine'))
+                        .withQueryStringParameters(new Parameter('processName', 'RedmineTraceInjector'))
+        ).respond(response(getToolConfigurationFromBlackboard())
+                .withStatusCode(200)
+                .withHeaders(new Header('Content-Type', 'application/json; charset=utf-8'))
+        )
+        mockServer.when(
+                request('/projects/57ccad338acec633f77f862e')
+                        .withMethod('GET')
+        ).respond(response(getProjectFromBlackboard())
+                .withStatusCode(200)
+                .withHeaders(new Header('Content-Type', 'application/json; charset=utf-8'))
+        )
+        mockServer.when(
+                request("/organizations/57e89b278acec6487695a4b5/repositories")
+                        .withMethod('GET')
+                        .withQueryStringParameters(new Parameter('toolName', 'Redmine'))
+        ).respond(response(getRepositoryFromBlackboard())
+                .withStatusCode(200)
+                .withHeaders(new Header('Content-Type', 'application/json; charset=utf-8'))
+        )
         mockServer.when(
                 request('/traces')
                         .withMethod('GET')
@@ -142,11 +169,8 @@ class InjectorServiceSpec extends Specification {
                 .withHeaders(new Header('Content-Type', 'application/json; charset=utf-8'))
         )
 
-        when:
-        service.injectProjectTrace(projectId, redmineProjectId)
-
-        then:
-        true
+        expect:
+        service.injectProcess()
     }
 }
 
