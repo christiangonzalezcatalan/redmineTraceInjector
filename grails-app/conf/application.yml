@@ -15,6 +15,8 @@ dataSource:
 
 environments:
     development:
+        server:
+            port: 8084
         injector:
             gemsbbUrl: 'http://localhost:8080'
         dataSource:
@@ -22,8 +24,8 @@ environments:
             url: jdbc:h2:mem:devDb;MVCC=TRUE;LOCK_TIMEOUT=10000;DB_CLOSE_ON_EXIT=FALSE
     test:
         injector:
-            gemsbbUrl: 'http://localhost:8081'
-            #gemsbbUrl: 'http://localhost:8080'
+            #gemsbbUrl: 'http://localhost:8081'
+            gemsbbUrl: 'http://localhost:8080'
         dataSource:
             dbCreate: update
             url: jdbc:h2:mem:testDb;MVCC=TRUE;LOCK_TIMEOUT=10000;DB_CLOSE_ON_EXIT=FALSE
@@ -51,6 +53,8 @@ environments:
                 defaultTransactionIsolation: 2 # TRANSACTION_READ_COMMITTED
 
 ---
+quartz:
+    autoStartup: true
 ---
 grails:
     profile: web

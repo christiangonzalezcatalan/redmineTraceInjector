@@ -262,5 +262,7 @@ class InjectorService {
             def bbTrace = saveBlackboardTrace(trace, projectId, taskTraceList)
             def bbMapping = saveBlackboardMapping(mapping, projectId, bbTrace)
         }
+
+        println "Traza del proyecto ${projectId} cargada."
     }
 }
