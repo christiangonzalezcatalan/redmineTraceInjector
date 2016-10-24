@@ -7,6 +7,8 @@ import org.springframework.http.HttpStatus
 import grails.util.Holders
 import org.bson.types.ObjectId
 
+import groovy.json.JsonOutput
+
 @Transactional
 class InjectorService {
     private static String toolName = 'Redmine'
@@ -145,7 +147,7 @@ class InjectorService {
     }
 
     private def buildDetail(timeEntry, member) {
-        [ member: [id: member.id],
+        [ member: [id: member.id[0]], // WTF!!
           date: Date.parse('yyyy-MM-dd', timeEntry.spent_on),
           hours: timeEntry.hours]
     }

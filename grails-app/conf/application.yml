@@ -53,8 +53,19 @@ environments:
                 defaultTransactionIsolation: 2 # TRANSACTION_READ_COMMITTED
 
 ---
-quartz:
-    autoStartup: true
+rabbitmq:
+    connections:
+      - name: main
+        host: localhost
+        username: guest
+        password: guest
+    queues:
+      - name: testGemsBBTrace
+        exchange: testGemsBBExchange
+        binding: 'RedmineTraceInjector.load'
+    exchanges:
+      - name: testGemsBBExchange
+        type: topic
 ---
 grails:
     profile: web
