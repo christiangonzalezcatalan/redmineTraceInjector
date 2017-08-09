@@ -16,9 +16,9 @@ class InjectorService {
     RestBuilder restClient = new RestBuilder()
     String gemsbbUrl = Holders.grailsApplication.config.getProperty('injector.gemsbbUrl')
 
-    private def getToolsConfigurationFromBB() {
+    private def getProjectsConfigurationFromBB() {
         def resp = restClient.get(
-            "${gemsbbUrl}/toolsConfiguration?toolName=${InjectorService.toolName}&processName=${InjectorService.processName}")
+            "${gemsbbUrl}/projects?toolName=${InjectorService.toolName}&processName=${InjectorService.processName}")
 
         if(resp.getStatusCode() != HttpStatus.OK) {
             throw new Exception("Error al obtener la configuración del proceso ${InjectorService.processName}. HttpStatusCode: ${resp.getStatusCode()}")
@@ -216,12 +216,11 @@ class InjectorService {
     }
 
     def injectProcess() {
-        def toolsConfig = getToolsConfigurationFromBB()
-        toolsConfig.each() {
-            def project = getProjectFromBB(it.project.id)
-            def repository = getRepositoryFromBB(project.organization.id)
-
-            injectProjectTrace(it.project.id, it.parameters.projectId, repository)
+        def projectsConfig = getProjectsConfigurationFromBB()
+        
+        projectsConfig.each() {
+            def repository = getRepositoryFromBB(it.organization.id)
+            injectProjectTrace(it.id, it.toolsConfiguration.parameters.projectId[0], repository)
         }
     }
 
